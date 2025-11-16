@@ -21,8 +21,8 @@ BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
     "8245340349:AAF2sB8Gn5dXiqQQ1ldxAHqk_wpsdcLrH2c"  # твой токен; лучше потом заменить на env
 )
-
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+default = DefaultBotProperties(parse_mode="HTML")
+bot = Bot(token=BOT_TOKEN, default=default)
 dp = Dispatcher()
 
 PREP_DIR = "preparats"

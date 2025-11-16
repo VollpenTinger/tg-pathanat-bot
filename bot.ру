@@ -1,0 +1,269 @@
+import asyncio
+import json
+import os
+import random
+from typing import List, Dict, Any
+
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import CommandStart, Command
+from aiogram.types import (
+    Message, CallbackQuery,
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton,
+    FSInputFile
+)
+
+# ----------------------------------------------------------
+# TOKEN: можно вписать сюда для теста ЛОКАЛЬНО:
+# BOT_TOKEN = "8245340349:AAF2sB8Gn5dXiqQQ1ldxAHqk_wpsdcLrH2c"
+
+
+# но для Render токен будет в Environment Variables:
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+if not BOT_TOKEN:
+    raise RuntimeError("Не найден BOT_TOKEN. Укажи его в Render.")
+
+PREPARATS_DIR = "preparats"
+
+bot = Bot(BOT_TOKEN, parse_mode="HTML")
+dp = Dispatcher()
+
+SPECIMENS: List[Dict[str, Any]] = []
+user_state: Dict[int, Dict[str, Any]] = {}
+
+
+# ----------------------------------------------------------
+# Загрузка препаратов
+# ----------------------------------------------------------
+
+def load_preparats_from_folders(base_path=PREPARATS_DIR):
+    all_preps = []
+    if not os.path.exists(base_path):
+        os.makedirs(base_path, exist_ok=True)
+        return all_preps
+
+    current_id = 1
+    for folder in sorted(os.listdir(base_path)):
+        folder_path = os.path.join(base_path, folder)
+        if not os.path.isdir(folder_path):
+            continue
+
+        info_file = os.path.join(folder_path, "info.json")
+        if not os.path.exists(info_file):
+            continue
+
+        with open(info_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        name = data.get("name")
+        if not name:
+            continue
+
+        difficulty = data.get("difficulty", "easy")
+        aliases = data.get("aliases", [])
+
+        images = []
+        for file in sorted(os.listdir(folder_path)):
+            if file.lower().endswith((".jpg", ".jpeg", ".png")):
+                images.append(os.path.join(folder_path, file))
+
+        if not images:
+            continue
+
+        all_preps.append({
+            "id": current_id,
+            "name": name,
+            "difficulty": difficulty,
+            "aliases": aliases,
+            "images": images
+        })
+
+        current_id += 1
+
+    return all_preps
+
+
+def normalize_text(t: str):
+    return t.strip().lower().replace("ё", "е")
+
+
+def get_specimens_by_difficulty(diff):
+    if diff is None:
+        return SPECIMENS
+    selected = [s for s in SPECIMENS if s["difficulty"] == diff]
+    return selected or SPECIMENS
+
+
+def get_random_specimen(diff=None):
+    return random.choice(get_specimens_by_difficulty(diff))
+
+
+def get_specimen_by_id(spec_id):
+    for s in SPECIMENS:
+        if s["id"] == spec_id:
+            return s
+
+
+# ----------------------------------------------------------
+# Кнопки
+# ----------------------------------------------------------
+
+def main_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📚 Обучение")],
+            [KeyboardButton(text="🧪 Тест (лёгкий)"), KeyboardButton(text="🔥 Тест (сложный)")]
+        ],
+        resize_keyboard=True
+    )
+
+
+def next_button_keyboard(mode):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="➡️ Далее", callback_data=f"next:{mode}")]]
+    )
+
+
+# ----------------------------------------------------------
+# Отправка фото
+# ----------------------------------------------------------
+
+async def send_specimen_image(chat_id, specimen, text, kb=None):
+    img = random.choice(specimen["images"])
+    if os.path.exists(img):
+        await bot.send_photo(chat_id, FSInputFile(img), caption=text, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id, text, reply_markup=kb)
+
+
+# ----------------------------------------------------------
+# Handlers
+# ----------------------------------------------------------
+
+@dp.message(CommandStart())
+async def start_cmd(msg: Message):
+    await msg.answer(
+        "Привет! 👋\nЯ бот для тренировки микропрепаратов.\n\n"
+        "Выбери режим:",
+        reply_markup=main_menu_keyboard()
+    )
+
+
+# ---- Обучение ----
+
+@dp.message(F.text == "📚 Обучение")
+async def training(msg: Message):
+    specimen = get_random_specimen()
+    text = f"<b>{specimen['name']}</b>"
+    await send_specimen_image(msg.chat.id, specimen, text, next_button_keyboard("train"))
+
+
+# ---- Лёгкий тест ----
+
+@dp.message(F.text == "🧪 Тест (лёгкий)")
+async def easy_test(msg: Message):
+    specimen = get_random_specimen("easy")
+
+    others = [s for s in SPECIMENS if s["id"] != specimen["id"]]
+    options = [specimen["name"]] + [s["name"] for s in random.sample(others, min(3, len(others)))]
+    random.shuffle(options)
+
+    user_state[msg.from_user.id] = {
+        "mode": "easy",
+        "specimen_id": specimen["id"],
+        "options": options,
+        "correct": specimen["name"]
+    }
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=o, callback_data=f"opt:{i}")]
+            for i, o in enumerate(options)
+        ]
+    )
+
+    await send_specimen_image(msg.chat.id, specimen, "Выбери правильный вариант:", kb)
+
+
+@dp.callback_query(F.data.startswith("opt:"))
+async def easy_answer(cb: CallbackQuery):
+    user = user_state.get(cb.from_user.id)
+    if not user or user["mode"] != "easy":
+        await cb.answer("Начни тест заново.")
+        return
+
+    chosen_idx = int(cb.data.split(":")[1])
+    chosen = user["options"][chosen_idx]
+    correct = user["correct"]
+
+    if chosen == correct:
+        text = f"✅ Верно!\n<b>{correct}</b>"
+    else:
+        text = f"❌ Неверно.\nПравильно: <b>{correct}</b>"
+
+    await cb.message.answer(text, reply_markup=next_button_keyboard("easy"))
+    await cb.answer()
+
+
+# ---- Сложный тест ----
+
+@dp.message(F.text == "🔥 Тест (сложный)")
+async def hard(msg: Message):
+    specimen = get_random_specimen("hard")
+    user_state[msg.from_user.id] = {"mode": "hard", "specimen_id": specimen["id"]}
+
+    await send_specimen_image(
+        msg.chat.id, specimen,
+        "Впиши <b>точное название</b> препарата:"
+    )
+
+
+@dp.message()
+async def hard_answer(msg: Message):
+    user = user_state.get(msg.from_user.id)
+    if not user or user["mode"] != "hard":
+        return
+
+    specimen = get_specimen_by_id(user["specimen_id"])
+    answer = normalize_text(msg.text)
+
+    names = [normalize_text(specimen["name"])] + [normalize_text(a) for a in specimen["aliases"]]
+
+    if any(answer == n or answer in n or n in answer for n in names):
+        text = f"✅ Верно! Это <b>{specimen['name']}</b>"
+    else:
+        text = f"❌ Неверно.\nПравильный ответ: <b>{specimen['name']}</b>"
+
+    await msg.answer(text, reply_markup=next_button_keyboard("hard"))
+
+
+# ----------------------------------------------------------
+# NEXT
+# ----------------------------------------------------------
+
+@dp.callback_query(F.data.startswith("next:"))
+async def next_q(cb: CallbackQuery):
+    _, mode = cb.data.split(":")
+    if mode == "train":
+        await training(cb.message)
+    elif mode == "easy":
+        await easy_test(cb.message)
+    elif mode == "hard":
+        await hard(cb.message)
+
+    await cb.answer()
+
+
+# ----------------------------------------------------------
+# Main
+# ----------------------------------------------------------
+
+async def main():
+    global SPECIMENS
+    SPECIMENS = load_preparats_from_folders()
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -6,7 +6,8 @@ import random
 # ==========================
 # ⭐ ВСТАВЬ СВОЙ ТОКЕН СЮДА
 # ==========================
-BOT_TOKEN = "PASTE_YOUR_TOKEN_HERE"
+BOT_TOKEN "8245340349:AAF2sB8Gn5dXiqQQ1ldxAHqk_wpsdcLrH2c
+"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 

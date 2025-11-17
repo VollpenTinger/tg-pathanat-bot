@@ -1,378 +1,352 @@
-import asyncio
+import telebot
+from telebot import types
 import os
 import random
-import re
-from difflib import SequenceMatcher
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
-from aiogram.types import (
-    Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardMarkup, KeyboardButton,
-    FSInputFile,
-)
+# ==========================
+# ⭐ ВСТАВЬ СВОЙ ТОКЕН СЮДА
+# ==========================
+BOT_TOKEN = "PASTE_YOUR_TOKEN_HERE"
 
-# ===================== НАСТРОЙКИ =====================
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Можно оставить как есть, а можно вынести токен в переменную окружения BOT_TOKEN на Render
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN",
-    "8245340349:AAF2sB8Gn5dXiqQQ1ldxAHqk_wpsdcLrH2c"  # твой токен; лучше потом заменить на env
-)
-default = DefaultBotProperties(parse_mode="HTML")
-bot = Bot(token=BOT_TOKEN, default=default)
-dp = Dispatcher()
+# ==========================
+#   ИМПОРТ ВСЕХ ПРЕПАРАТОВ
+# ==========================
 
-PREP_DIR = "preparats"
+PREPARATS = {
+    # ---------- Амилоидозы ----------
+    "Амилоидоз печени": [
+        "amiloidoz_pecheni_1.jpeg",
+        "amiloidoz_pecheni_2.jpeg",
+        "amiloidoz_pecheni_3.jpeg",
+    ],
+    "Амилоидоз почки": [
+        "amiloidoz_pochki_1.jpeg",
+        "amiloidoz_pochki_2.jpeg",
+    ],
+    "Амилоидоз селезёнки (саговая форма)": [
+        "amiloidoz_selezenki_sagovaya_1.jpeg",
+        "amiloidoz_selezenki_sagovaya_2.jpeg",
+    ],
+    "Амилоидоз селезёнки (сальная форма)": [
+        "amiloidoz_selezenki_salnaya_1.jpeg",
+        "amiloidoz_selezenki_salnaya_2.jpeg",
+        "amiloidoz_selezenki_salnaya_3.jpeg",
+    ],
 
-# user_id -> правильный ответ для сложного уровня
-hard_answers: dict[int, str] = {}
+    # ---------- Воспаления ----------
+    "Антракоз лёгких": [
+        "antrakoz_legkikh_1.jpeg",
+        "antrakoz_legkikh_2.jpeg",
+        "antrakoz_legkikh_3.jpeg",
+    ],
+    "Острый серозный гастрит": [
+        "ostryi_seroznyi_gastrit_1.jpeg",
+        "ostryi_seroznyi_gastrit_2.jpeg",
+        "ostryi_seroznyi_gastrit_3.jpeg",
+        "ostryi_seroznyi_gastrit_4.jpeg",
+    ],
+    "Серозно-геморрагическая пневмония": [
+        "serozno_gemorragicheskaya_pnevmoniya_1.jpeg",
+        "serozno_gemorragicheskaya_pnevmoniya_2.jpeg",
+        "serozno_gemorragicheskaya_pnevmoniya_3.jpeg",
+    ],
+    "Серозное воспаление лёгких": [
+        "seroznoe_vosp_legkikh_1.jpeg",
+        "seroznoe_vosp_legkikh_2.jpeg",
+        "seroznoe_vosp_legkikh_3.jpeg",
+    ],
+    "Крупозная пневмония": [
+        "krupoznaya_pnevmoniya_1.jpeg",
+        "krupoznaya_pnevmoniya_2.jpeg",
+    ],
+    "Фибринозный перикардит": [
+        "fibrinoznyi_perikardit_1.jpeg",
+        "fibrinoznyi_perikardit_2.jpeg",
+        "fibrinoznyi_perikardit_3.jpeg",
+    ],
+    "Дифтеритический энтерит": [
+        "difteriticheskii_enterit_1.jpeg",
+        "difteriticheskii_enterit_2.jpeg",
+    ],
+    "Геморрагическое воспаление кишечника": [
+        "gemorragicheskoe_vospalenie_kishechnika_1.jpeg",
+        "gemorragicheskoe_vospalenie_kishechnika_2.jpeg",
+        "gemorragicheskoe_vospalenie_kishechnika_3.jpeg",
+    ],
+    "Гнойный нефрит": [
+        "gnoinyi_nefrit_1.jpeg",
+        "gnoinyi_nefrit_2.jpeg",
+        "gnoinyi_nefrit_3.jpeg",
+        "gnoinyi_nefrit_4.jpeg",
+    ],
+    "Хронический абсцесс печени": [
+        "khronicheskii_abscess_pecheni_1.jpeg",
+    ],
+    "Хронический катаральный энтерит (ГЭ)": [
+        "khronicheskii_kataralnyi_enterit_ge_1.jpeg",
+        "khronicheskii_kataralnyi_enterit_ge_2.jpeg",
+        "khronicheskii_kataralnyi_enterit_ge_3.jpeg",
+        "khronicheskii_kataralnyi_enterit_ge_4.jpeg",
+    ],
+    "Хронический катаральный энтерит (Судан III)": [
+        "khronicheskii_kataralnyi_enterit_sudan_1.jpeg",
+        "khronicheskii_kataralnyi_enterit_sudan_2.jpeg",
+        "khronicheskii_kataralnyi_enterit_sudan_3.jpeg",
+    ],
 
-# ===================== КАТЕГОРИИ =====================
+    # ---------- Дистрофии ----------
+    "Зернистая дистрофия почки": [
+        "zernistaya_distrofiya_pochki_1.jpeg",
+        "zernistaya_distrofiya_pochki_2.jpeg",
+    ],
+    "Зернистая дистрофия печени": [
+        "zernistaya_distrofiya_pecheni_1.jpeg",
+        "zernistaya_distrofiya_pecheni_2.jpeg",
+    ],
+    "Гиалиново-капельная дистрофия почки": [
+        "gialinovo_kapelnaya_distrofiya_pochki_1.jpeg",
+        "gialinovo_kapelnaya_distrofiya_pochki_2.jpeg",
+        "gialinovo_kapelnaya_distrofiya_pochki_3.jpeg",
+    ],
+    "Вакуольная дистрофия почки": [
+        "vakuolnaya_distrofiya_pochki_1.jpeg",
+    ],
+    "Коллоидная дистрофия щитовидной железы": [
+        "kolloidnaya_distrofiya_shchitovidnoi_1.jpeg",
+        "kolloidnaya_distrofiya_shchitovidnoi_2.jpeg",
+    ],
+    "Жировая дистрофия печени": [
+        "zhirovaia_distrofiya_pecheni_1.jpeg",
+        "zhirovaia_distrofiya_pecheni_2.jpeg",
+    ],
 
-CATEGORIES = {
-    "Дистрофии": [
-        "zernistaya_distrofiya_pochki",
-        "zernistaya_distrofiya_pecheni",
-        "gialinovo_kapelnaya_distrofiya_pochki",
-        "vakuolnaya_distrofiya_pochki",
-        "zhirovaia_distrofiya_pecheni",
-        "kolloidnaya_distrofiya_shchitovidnoi",
+    # ---------- Гиалиноз ----------
+    "Гиалиноз селезёнки": [
+        "gialinoz_selezenki_1.jpeg",
+        "gialinoz_selezenki_2.jpeg",
+        "gialinoz_selezenki_3.jpeg",
     ],
-    "Воспаления": [
-        "ostryi_seroznyi_gastrit",
-        "seroznoe_vosp_legkikh",
-        "serozno_gemorragicheskaya_pnevmoniya",
-        "gemorragicheskoe_vospalenie_kishechnika",
-        "difteriticheskii_enterit",
-        "gnoinyi_nefrit",
-        "khronicheskii_kataralnyi_enterit_ge",
-        "khronicheskii_kataralnyi_enterit_sudan",
-        "khronicheskii_abscess_pecheni",
+    "Гиалиноз стенки сосуда матки": [
+        "gialinoz_stenki_sosuda_matki_1.jpeg",
+        "gialinoz_stenki_sosuda_matki_2.jpeg",
+        "gialinoz_stenki_sosuda_matki_3.jpeg",
     ],
-    "Некрозы": [
-        "nekroticheskii_nefroz",
-        "tsenkerovskii_voskovidnyi_nekroz_myshc",
-        "tvorozhistyi_nekroz_legkikh_tb",
-        "tvorozhistyi_nekroz_lymph_tb",
+
+    # ---------- Пигменты и пылевые ----------
+    "Гемосидероз печени": [
+        "hemosideroz_pecheni_1.jpeg",
+        "hemosideroz_pecheni_2.jpeg",
     ],
-    "Амилоидозы": [
-        "amiloidoz_pecheni",
-        "amiloidoz_pochki",
-        "amiloidoz_selezenki_sagovaya",
-        "amiloidoz_selezenki_salnaya",
+    "Гемосидероз печени (мускатная печень)": [
+        "hemosideroz_pecheni_muskatnaya_1.jpeg",
+        "hemosideroz_pecheni_muskatnaya_2.jpeg",
+        "hemosideroz_pecheni_muskatnaya_3.jpeg",
     ],
-    "Гемосидероз": [
-        "hemosideroz_pecheni",
-        "hemosideroz_pecheni_muskatnaya",
-        "hemosideroz_selezenki_ge",
-        "hemosideroz_selezenki_perls",
+    "Гемосидероз селезёнки (ГЭ)": [
+        "hemosideroz_selezenki_ge_1.jpeg",
+        "hemosideroz_selezenki_ge_2.jpeg",
+        "hemosideroz_selezenki_ge_3.jpeg",
+        "hemosideroz_selezenki_ge_4.jpeg",
     ],
-    "Гиперемия / застой": [
-        "ostraya_zastoynaya_giperemiya_otek_legkikh",
-        "ostraya_zastoynaya_venoznaya_giperemiya_pecheni",
-        "khronicheskoe_venoznoe_polnokrovie_muskatnaya_pechen",
+    "Гемосидероз селезёнки (Перлс)": [
+        "hemosideroz_selezenki_perls_1.jpeg",
+        "hemosideroz_selezenki_perls_2.jpeg",
+        "hemosideroz_selezenki_perls_3.jpeg",
+        "hemosideroz_selezenki_perls_4.jpeg",
     ],
-    "Инфаркты": [
-        "ishemicheskii_infarkt_pochki",
-        "ishemicheskii_infarkt_selezenki",
-        "gemorragicheskii_infarkt_pochki",
-        "gemorragicheskii_infarkt_legkogo",
+    "Меланоз печени": [
+        "melanoz_pecheni_1.jpeg",
+        "melanoz_pecheni_2.jpeg",
+        "melanoz_pecheni_3.jpeg",
     ],
-    "Индурации": [
-        "buraya_induratsiya_legkogo",
-        "buraya_induratsiya_pecheni",
+    "Антракоз лёгких": [
+        "antrakoz_legkikh_1.jpeg",
+        "antrakoz_legkikh_2.jpeg",
+        "antrakoz_legkikh_3.jpeg",
     ],
-    "Пневмонии": [
-        "krupoznaya_pnevmoniya",
-        "serozno_gemorragicheskaya_pnevmoniya",
+
+    # ---------- Некрозы ----------
+    "Некротический нефроз": [
+        "nekroticheskii_nefroz_1.jpeg",
+        "nekroticheskii_nefroz_2.jpeg",
+        "nekroticheskii_nefroz_3.jpeg",
     ],
-    "Прочее": [
-        "smeshannyi_tromb",
-        "antrakoz_legkikh",
+    "Творожистый некроз лёгких при туберкулёзе": [
+        "tvorozhistyi_nekroz_legkikh_tb_1.jpeg",
+        "tvorozhistyi_nekroz_legkikh_tb_2.jpeg",
+    ],
+    "Творожистый некроз лимфоузла при туберкулёзе": [
+        "tvorozhistyi_nekroz_lymph_tb_1.jpeg",
+        "tvorozhistyi_nekroz_lymph_tb_2.jpeg",
+    ],
+    "Ценкеровский восковидный некроз мышц": [
+        "tsenkerovskii_voskovidnyi_nekroz_myshc_1.jpeg",
+        "tsenkerovskii_voskovidnyi_nekroz_myshc_2.jpeg",
+    ],
+
+    # ---------- Инфаркты ----------
+    "Ишемический инфаркт почки": [
+        "ishemicheskii_infarkt_pochki_1.jpeg",
+        "ishemicheskii_infarkt_pochki_2.jpeg",
+    ],
+    "Ишемический инфаркт селезёнки": [
+        "ishemicheskii_infarkt_selezenki_1.jpeg",
+        "ishemicheskii_infarkt_selezenki_2.jpeg",
+    ],
+    "Геморрагический инфаркт почки": [
+        "gemorragicheskii_infarkt_pochki_1.jpeg",
+        "gemorragicheskii_infarkt_pochki_2.jpeg",
+        "gemorragicheskii_infarkt_pochki_3.jpeg",
+    ],
+    "Геморрагический инфаркт лёгкого": [
+        "gemorragicheskii_infarkt_legkogo_1.jpeg",
+        "gemorragicheskii_infarkt_legkogo_2.jpeg",
+    ],
+
+    # ---------- Кровообращение ----------
+    "Бурая индурация печени": [
+        "buraya_induratsiya_pecheni_1.jpeg",
+        "buraya_induratsiya_pecheni_2.jpeg",
+    ],
+    "Бурая индурация лёгкого": [
+        "buraya_induratsiya_legkogo_1.jpeg",
+        "buraya_induratsiya_legkogo_2.jpeg",
+    ],
+    "Острая застойная венозная гиперемия печени": [
+        "ostraya_zastoynaya_venoznaya_giperemiya_pecheni_1.jpeg",
+        "ostraya_zastoynaya_venoznaya_giperemiya_pecheni_2.jpeg",
+    ],
+    "Острая застойная гиперемия и отёк лёгких": [
+        "ostraya_zastoynaya_giperemiya_otek_legkikh_1.jpeg",
+        "ostraya_zastoynaya_giperemiya_otek_legkikh_2.jpeg",
+    ],
+    "Хроническое венозное полнокровие (мускатная печень)": [
+        "khronicheskoe_venoznoe_polnokrovie_muskatnaya_pechen_1.jpeg",
+        "khronicheskoe_venoznoe_polnokrovie_muskatnaya_pechen_2.jpeg",
+    ],
+
+    # ---------- Тромбы ----------
+    "Смешанный тромб": [
+        "smeshannyi_tromb_1.jpeg",
+        "smeshannyi_tromb_2.jpeg",
     ],
 }
 
-# ===================== РУССКИЕ НАЗВАНИЯ =====================
 
-RUS_NAMES = {
-    "zernistaya_distrofiya_pochki": "Зернистая дистрофия почки",
-    "zernistaya_distrofiya_pecheni": "Зернистая дистрофия печени",
-    "gialinovo_kapelnaya_distrofiya_pochki": "Гиалиново-капельная дистрофия почки",
-    "vakuolnaya_distrofiya_pochki": "Вакуольная дистрофия почки",
-    "zhirovaia_distrofiya_pecheni": "Жировая дистрофия печени",
-    "kolloidnaya_distrofiya_shchitovidnoi": "Коллоидная дистрофия щитовидной железы",
+# ======================================
+#              ЛОГИКА БОТА
+# ======================================
 
-    "ostryi_seroznyi_gastrit": "Острый серозный гастрит",
-    "seroznoe_vosp_legkikh": "Серозное воспаление лёгких",
-    "serozno_gemorragicheskaya_pnevmoniya": "Серозно-геморрагическая пневмония",
-    "gemorragicheskoe_vospalenie_kishechnika": "Геморрагическое воспаление кишечника",
-    "difteriticheskii_enterit": "Дифтеритический энтерит",
-    "gnoinyi_nefrit": "Гнойный нефрит",
-    "khronicheskii_kataralnyi_enterit_ge": "Хронический катаральный энтерит (ГЭ)",
-    "khronicheskii_kataralnyi_enterit_sudan": "Хронический катаральный энтерит (Судан III)",
-    "khronicheskii_abscess_pecheni": "Хронический абсцесс печени",
-
-    "nekroticheskii_nefroz": "Некротический нефроз",
-    "tsenkerovskii_voskovidnyi_nekroz_myshc": "Ценкеровский (восковидный) некроз мышц",
-    "tvorozhistyi_nekroz_legkikh_tb": "Творожистый некроз лёгких при туберкулёзе",
-    "tvorozhistyi_nekroz_lymph_tb": "Творожистый (казеозный) некроз лимфоузла при туберкулёзе",
-
-    "amiloidoz_pecheni": "Амилоидоз печени",
-    "amiloidoz_pochki": "Амилоидоз почки",
-    "amiloidoz_selezenki_sagovaya": "Амилоидоз селезёнки (саговая форма)",
-    "amiloidoz_selezenki_salnaya": "Амилоидоз селезёнки (сальная форма)",
-
-    "hemosideroz_pecheni": "Гемосидероз печени",
-    "hemosideroz_pecheni_muskatnaya": "Гемосидероз печени (мускатная печень)",
-    "hemosideroz_selezenki_ge": "Гемосидероз селезёнки (ГЭ)",
-    "hemosideroz_selezenki_perls": "Гемосидероз селезёнки (Перлс)",
-
-    "ostraya_zastoynaya_giperemiya_otek_legkikh": "Острая застойная гиперемия и отёк лёгких",
-    "ostraya_zastoynaya_venoznaya_giperemiya_pecheni": "Острая застойная венозная гиперемия печени",
-    "khronicheskoe_venoznoe_polnokrovie_muskatnaya_pechen": "Хроническое венозное полнокровие (мускатная печень)",
-
-    "ishemicheskii_infarkt_pochki": "Ишемический инфаркт почки",
-    "ishemicheskii_infarkt_selezenki": "Ишемический инфаркт селезёнки",
-    "gemorragicheskii_infarkt_pochki": "Геморрагический инфаркт почки",
-    "gemorragicheskii_infarkt_legkogo": "Геморрагический инфаркт лёгкого",
-
-    "buraya_induratsiya_legkogo": "Бурая индурация лёгкого",
-    "buraya_induratsiya_pecheni": "Бурая индурация печени",
-
-    "krupoznaya_pnevmoniya": "Крупозная пневмония",
-
-    "smeshannyi_tromb": "Смешанный тромб",
-    "antrakoz_legkikh": "Антракоз лёгких",
-}
-
-# ===================== ЗАГРУЗКА КАРТИНОК =====================
-
-# base_name -> [список путей к файлам]
-SPECIMENS: dict[str, list[str]] = {}
+USER_STATE = {}  # user_id: {"mode": "...", "correct": "..."}
 
 
-def load_all_files():
-    if not os.path.isdir(PREP_DIR):
-        print(f"Папка {PREP_DIR} не найдена")
-        return
+# ---------------- КНОПКИ ----------------
 
-    for fname in os.listdir(PREP_DIR):
-        lower = fname.lower()
-        if not lower.endswith((".jpg", ".jpeg", ".png")):
-            continue
-
-        stem = os.path.splitext(fname)[0]
-        # убираем номер в конце _1, _2 и т.д.
-        base = re.sub(r"[_\.\- ]?\d+$", "", stem)
-        path = os.path.join(PREP_DIR, fname)
-
-        SPECIMENS.setdefault(base, []).append(path)
-
-    print(f"Загружено баз: {len(SPECIMENS)}")
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📚 Обучение")
+    markup.row("❓ Тест (варианты)", "⌨️ Тест (ввод)")
+    return markup
 
 
-# ===================== КЛАВИАТУРЫ =====================
+# ---------------- ОБУЧЕНИЕ ----------------
 
-def main_menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📚 Обучение")],
-            [
-                KeyboardButton(text="🟡 Лёгкий уровень"),
-                KeyboardButton(text="🔴 Сложный уровень"),
-            ],
-        ],
-        resize_keyboard=True,
-    )
+@bot.message_handler(func=lambda m: m.text == "📚 Обучение")
+def send_training(message):
+    name = random.choice(list(PREPARATS.keys()))
+    photos = PREPARATS[name]
 
+    bot.send_message(message.chat.id, f"📌 <b>{name}</b>", parse_mode="HTML")
 
-def categories_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=cat, callback_data=f"cat:{cat}")]
-            for cat in CATEGORIES.keys()
-        ]
-    )
+    for p in photos:
+        path = os.path.join("preparats", p)
+        bot.send_photo(message.chat.id, open(path, "rb"))
 
 
-def diagnoses_kb(cat: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=RUS_NAMES.get(base, base),
-                    callback_data=f"diag:{base}",
-                )
-            ]
-            for base in CATEGORIES.get(cat, [])
-        ]
-    )
+# ---------------- ТЕСТ (ВАРИАНТЫ) ----------------
+
+@bot.message_handler(func=lambda m: m.text == "❓ Тест (варианты)")
+def test_mcq(message):
+    name = random.choice(list(PREPARATS.keys()))
+    correct = name
+    photos = PREPARATS[name]
+
+    USER_STATE[message.chat.id] = {"mode": "mcq", "correct": correct}
+
+    first_photo = os.path.join("preparats", photos[0])
+    bot.send_photo(message.chat.id, open(first_photo, "rb"), caption="Что за препарат?")
+
+    options = random.sample(list(PREPARATS.keys()), 4)
+    if correct not in options:
+        options[0] = correct
+    random.shuffle(options)
+
+    markup = types.InlineKeyboardMarkup()
+    for opt in options:
+        markup.add(types.InlineKeyboardButton(text=opt, callback_data=f"ans:{opt}"))
+
+    bot.send_message(message.chat.id, "Выбери правильный ответ:", reply_markup=markup)
 
 
-# ===================== ОБУЧЕНИЕ =====================
-
-@dp.message(F.text == "📚 Обучение")
-async def learning(msg: Message):
-    await msg.answer("Выбери категорию:", reply_markup=categories_kb())
-
-
-@dp.callback_query(F.data.startswith("cat:"))
-async def category_select(cb: CallbackQuery):
-    cat = cb.data.split(":", 1)[1]
-    await cb.message.answer(
-        f"Выбери диагноз в категории <b>{cat}</b>:",
-        reply_markup=diagnoses_kb(cat),
-    )
-    await cb.answer()
-
-
-@dp.callback_query(F.data.startswith("diag:"))
-async def diagnosis_show(cb: CallbackQuery):
-    base = cb.data.split(":", 1)[1]
-    name = RUS_NAMES.get(base, base)
-    images = SPECIMENS.get(base, [])
-
-    if not images:
-        await cb.message.answer(f"Нет изображений для: <b>{name}</b>")
-        await cb.answer()
-        return
-
-    # отправляем ВСЕ изображения препарата
-    for img in sorted(images):
-        await cb.message.answer_photo(FSInputFile(img))
-
-    await cb.message.answer(f"<b>{name}</b>")
-    await cb.answer()
-
-
-# ===================== ЛЁГКИЙ ТЕСТ =====================
-
-@dp.message(F.text == "🟡 Лёгкий уровень")
-async def easy_test(msg: Message):
-    if not SPECIMENS:
-        await msg.answer("Нет загруженных препаратов.")
-        return
-
-    base = random.choice(list(SPECIMENS.keys()))
-    correct = RUS_NAMES.get(base, base)
-    img = random.choice(SPECIMENS[base])
-
-    # варианты отвелов
-    others = [b for b in SPECIMENS.keys() if b != base]
-    other_names = [RUS_NAMES.get(b, b) for b in others]
-    if len(other_names) >= 3:
-        wrong = random.sample(other_names, 3)
-    else:
-        wrong = other_names
-
-    variants = wrong + [correct]
-    random.shuffle(variants)
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=v,
-                    callback_data=f"ans:{v}|{correct}",
-                )
-            ]
-            for v in variants
-        ]
-    )
-
-    await msg.answer_photo(
-        FSInputFile(img),
-        caption="Выбери правильный вариант:",
-        reply_markup=kb,
-    )
-
-
-@dp.callback_query(F.data.startswith("ans:"))
-async def easy_answer(cb: CallbackQuery):
-    payload = cb.data.split(":", 1)[1]
-    chosen, correct = payload.split("|", 1)
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ans:"))
+def handle_mcq_answer(call):
+    chosen = call.data.split(":", 1)[1]
+    correct = USER_STATE.get(call.message.chat.id, {}).get("correct")
 
     if chosen == correct:
-        text = f"✅ Верно! Это <b>{correct}</b>"
+        bot.answer_callback_query(call.id, "Верно! ✅")
+        bot.send_message(call.message.chat.id, f"Правильный ответ: <b>{correct}</b>", parse_mode="HTML")
     else:
-        text = f"❌ Неверно.\nПравильный ответ: <b>{correct}</b>"
+        bot.answer_callback_query(call.id, "Неверно ❌")
+        bot.send_message(call.message.chat.id, f"Неверно.\nПравильный ответ: <b>{correct}</b>", parse_mode="HTML")
 
-    await cb.message.answer(text)
-    await cb.answer()
-
-
-# ===================== СЛОЖНЫЙ ТЕСТ =====================
-
-def fuzzy_ratio(a: str, b: str) -> float:
-    return SequenceMatcher(None, a, b).ratio()
+    test_mcq(call.message)
 
 
-@dp.message(F.text == "🔴 Сложный уровень")
-async def hard_start(msg: Message):
-    if not SPECIMENS:
-        await msg.answer("Нет загруженных препаратов.")
-        return
+# ---------------- ТЕСТ (ВВОД) ----------------
 
-    base = random.choice(list(SPECIMENS.keys()))
-    img = random.choice(SPECIMENS[base])
-    correct = RUS_NAMES.get(base, base).lower()
+@bot.message_handler(func=lambda m: m.text == "⌨️ Тест (ввод)")
+def test_typing(message):
+    name = random.choice(list(PREPARATS.keys()))
+    USER_STATE[message.chat.id] = {"mode": "typing", "correct": name}
 
-    hard_answers[msg.from_user.id] = correct
+    photos = PREPARATS[name]
+    first_photo = os.path.join("preparats", photos[0])
 
-    await msg.answer_photo(
-        FSInputFile(img),
-        caption="Напиши название препарата (можно без строгого совпадения):",
-    )
+    bot.send_photo(message.chat.id, open(first_photo, "rb"))
+    bot.send_message(message.chat.id, "Напиши название препарата:")
 
 
-@dp.message()
-async def hard_check(msg: Message):
-    # если пользователь не в режиме сложного уровня — игнорируем
-    if msg.from_user.id not in hard_answers:
-        return
+@bot.message_handler(func=lambda m: m.chat.id in USER_STATE and USER_STATE[m.chat.id]["mode"] == "typing")
+def receive_typing(message):
+    correct = USER_STATE[message.chat.id]["correct"]
+    user_text = message.text.lower().replace("ё", "е")
 
-    correct = hard_answers[msg.from_user.id]
-    user_answer = msg.text.lower().strip()
+    correct_norm = correct.lower().replace("ё", "е")
 
-    score = fuzzy_ratio(user_answer, correct)
-
-    if score >= 0.7:
-        text = f"✅ Верно! Это <b>{correct}</b>\n(совпадение: {score:.2f})"
+    if any(word in user_text for word in correct_norm.split()):
+        bot.send_message(message.chat.id, f"Верно! ✅ Это <b>{correct}</b>", parse_mode="HTML")
     else:
-        text = (
-            f"❌ Неверно.\n"
-            f"Твой ответ: <b>{msg.text}</b>\n"
-            f"Правильный: <b>{correct}</b>\n"
-            f"(совпадение: {score:.2f})"
-        )
+        bot.send_message(message.chat.id, f"❌ Неверно.\nПравильный ответ: <b>{correct}</b>", parse_mode="HTML")
 
-    await msg.answer(text)
-    # сбрасываем состояние
-    del hard_answers[msg.from_user.id]
+    test_typing(message)
 
 
-# ===================== START / MAIN =====================
+# ---------------- СТАРТ ----------------
 
-@dp.message(CommandStart())
-async def cmd_start(msg: Message):
-    await msg.answer(
-        "Привет! Я бот для тренировки микропрепаратов по патанатомии.\n\n"
-        "Режимы:\n"
-        "📚 Обучение — категории → диагноз → все фото\n"
-        "🟡 Лёгкий уровень — картинка + 4 варианта\n"
-        "🔴 Сложный уровень — картинка, ответ пишешь сам",
-        reply_markup=main_menu(),
-    )
+@bot.message_handler(commands=["start"])
+def start(message):
+    bot.send_message(message.chat.id,
+                     "Привет! 👋 Я бот для изучения микропрепаратов.\n\n"
+                     "Выбери режим:",
+                     reply_markup=main_menu())
 
 
-async def main():
-    load_all_files()
-    await dp.start_polling(bot)
+# ---------------- ЗАПУСК ----------------
 
+print("Бот запущен!")
+bot.infinity_polling()
 
-if __name__ == "__main__":
-    asyncio.run(main())
-
+    

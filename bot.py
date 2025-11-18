@@ -703,3 +703,262 @@ def pick_next_training_prep(user_id: int) -> Preparat | None:
     return PREP_BY_ID[prep_id]
 
 
+# ========== ХЕНДЛЕРЫ ==========
+
+@bot.message_handler(commands=["start"])
+def cmd_start(message: types.Message):
+    bot.send_message(
+        message.chat.id,
+        "Привет! Я бот для отработки микропрепаратов по патанатомии.\n\n"
+        "Режимы:\n"
+        "• <b>Обучение</b> – показываю препарат и его название (по разделам).\n"
+        "• <b>Случайные препараты</b> – обучение на всех препаратах вперемешку.\n"
+        "• <b>Тест (варианты)</b> – выбираешь правильный ответ из списка.\n"
+        "• <b>Тест (ввод)</b> – сам вписываешь ответ.\n"
+        "• <b>Статистика</b> – твои результаты.\n"
+        "• <b>Повторить ошибки</b> – тренировка по сложным препаратам.\n",
+        reply_markup=main_keyboard(),
+    )
+
+
+# ---------- ОБУЧЕНИЕ: ВЫБОР РАЗДЕЛА ----------
+
+@bot.message_handler(func=lambda m: m.text == "📚 Обучение")
+def handle_training_menu(message: types.Message):
+    kb = types.InlineKeyboardMarkup()
+
+    for cat in CATEGORIES_ORDERED:
+        kb.add(
+            types.InlineKeyboardButton(
+                text=cat,
+                callback_data=f"cat:{cat}",
+            )
+        )
+
+    # кнопка случайных препаров
+    kb.add(
+        types.InlineKeyboardButton(
+            text="Случайные препараты",
+            callback_data=f"cat:{RANDOM_CATEGORY_KEY}",
+        )
+    )
+
+    bot.send_message(
+        message.chat.id,
+        "Выбери раздел для обучения:",
+        reply_markup=kb,
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("cat:"))
+def handle_training_category(callback: types.CallbackQuery):
+    _, category_key = callback.data.split(":", 1)
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    ids = get_training_list_for_user(user_id, category_key)
+    if not ids:
+        bot.answer_callback_query(callback.id, "В этом разделе нет препаратов.")
+        bot.send_message(chat_id, "В этом разделе нет препаратов.", reply_markup=main_keyboard())
+        return
+
+    user_state[user_id]["mode"] = "train"
+
+    prep_id = user_state[user_id]["train_remaining"].pop()
+    user_state[user_id]["train_current_id"] = prep_id
+
+    cat_name = "Случайные препараты" if category_key == RANDOM_CATEGORY_KEY else category_key
+
+    bot.answer_callback_query(callback.id, f"Раздел: {cat_name}")
+    send_preparat_training(chat_id, PREP_BY_ID[prep_id], with_keyboard=True)
+
+
+# ---------- ВЫХОД ИЗ РЕЖИМА ОБУЧЕНИЯ ----------
+
+@bot.message_handler(func=lambda m: m.text == "🏁 Выйти")
+def handle_training_exit(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in user_state:
+        user_state.pop(user_id)
+
+    bot.send_message(
+        message.chat.id,
+        "Ты вышел из режима обучения 👌",
+        reply_markup=main_keyboard()
+    )
+
+
+# ---------- ОБУЧЕНИЕ: НАВИГАЦИЯ ----------
+
+@bot.message_handler(func=lambda m: m.text == "➡️ Следующий")
+def handle_training_next(message: types.Message):
+    user_id = message.from_user.id
+    st = user_state.get(user_id)
+
+    if not st or st.get("mode") != "train":
+        bot.send_message(
+            message.chat.id,
+            "Сначала выбери раздел обучения через кнопку «📚 Обучение».",
+            reply_markup=main_keyboard(),
+        )
+        return
+
+    prep = pick_next_training_prep(user_id)
+    if not prep:
+        bot.send_message(
+            message.chat.id,
+            "Все препараты в этом разделе уже изучены 🎉",
+            reply_markup=main_keyboard(),
+        )
+        return
+
+    send_preparat_training(message.chat.id, prep, with_keyboard=True)
+
+
+@bot.message_handler(func=lambda m: m.text == "🔙 Назад к разделам")
+def handle_training_back_to_categories(message: types.Message):
+
+    st = user_state.get(message.from_user.id)
+    if st:
+        st.pop("mode", None)
+        st.pop("train_category", None)
+        st.pop("train_remaining", None)
+        st.pop("train_current_id", None)
+
+    handle_training_menu(message)
+
+
+# ---------- ТЕСТ (ВАРИАНТЫ) ----------
+
+@bot.message_handler(func=lambda m: m.text == "❓ Тест (варианты)")
+def handle_test_mcq(message: types.Message):
+    send_mcq_question(message.chat.id, message.from_user.id, only_errors=False)
+
+
+@bot.message_handler(func=lambda m: m.text == "🔁 Повторить ошибки")
+def handle_test_mcq_errors(message: types.Message):
+    send_mcq_question(message.chat.id, message.from_user.id, only_errors=True)
+
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ans:"))
+def handle_answer(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    data = user_state.get(user_id)
+
+    if not data or data.get("mode") != "mcq":
+        bot.answer_callback_query(callback.id, "Этот вопрос устарел. Нажми «Тест (варианты)».", show_alert=True)
+        return
+
+    chosen_id = callback.data.split(":", 1)[1]
+    correct_id = data["correct_id"]
+    from_errors = data.get("from_errors", False)
+    correct_prep = PREP_BY_ID[correct_id]
+
+    stats = get_user_stats(user_id)
+    stats["total"] += 1
+
+    if chosen_id == correct_id:
+        stats["correct"] += 1
+        stats["errors"].discard(correct_id)
+        text = f"✅ Верно! Это <b>{correct_prep.name}</b>."
+    else:
+        stats["wrong"] += 1
+        stats["errors"].add(correct_id)
+
+        chosen_prep = PREP_BY_ID.get(chosen_id)
+        chosen_name = chosen_prep.name if chosen_prep else "—"
+
+        text = (
+            f"❌ Неверно.\n"
+            f"Ты выбрал: <b>{chosen_name}</b>\n"
+            f"Правильный ответ: <b>{correct_prep.name}</b>."
+        )
+
+    bot.send_message(callback.message.chat.id, text)
+    bot.answer_callback_query(callback.id)
+
+    send_mcq_question(callback.message.chat.id, user_id, only_errors=from_errors)
+
+
+# ---------- ТЕСТ (ВВОД) ----------
+
+@bot.message_handler(func=lambda m: m.text == "⌨️ Тест (ввод)")
+def handle_test_typing(message: types.Message):
+    send_typing_question(message.chat.id, message.from_user.id, only_errors=False)
+
+
+@bot.message_handler(func=lambda m: m.text == "📊 Статистика")
+def handle_stats(message: types.Message):
+    stats = get_user_stats(message.from_user.id)
+    total = stats["total"]
+    correct = stats["correct"]
+    wrong = stats["wrong"]
+
+    acc = round(correct * 100 / total, 1) if total > 0 else 0.0
+    errors_count = len(stats["errors"])
+
+    text = (
+        "<b>Твоя статистика:</b>\n"
+        f"• Всего вопросов: <b>{total}</b>\n"
+        f"• Правильных ответов: <b>{correct}</b>\n"
+        f"• Неправильных ответов: <b>{wrong}</b>\n"
+        f"• Точность: <b>{acc}%</b>\n"
+        f"• Препаратов в списке ошибок: <b>{errors_count}</b>\n"
+        "\nСовет: используй режим «🔁 Повторить ошибки», чтобы добить сложные препараты 😊"
+    )
+
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
+
+
+@bot.message_handler(
+    func=lambda m: m.text
+    and m.text not in [
+        "📚 Обучение",
+        "❓ Тест (варианты)",
+        "⌨️ Тест (ввод)",
+        "📊 Статистика",
+        "🔁 Повторить ошибки",
+        "➡️ Следующий",
+        "🔙 Назад к разделам",
+        "🏁 Выйти",
+    ]
+)
+def handle_typing_answer(message: types.Message):
+    user_id = message.from_user.id
+    data = user_state.get(user_id)
+
+    if not data or data.get("mode") != "typing":
+        return
+
+    correct_prep = PREP_BY_ID[data["correct_id"]]
+    from_errors = data.get("from_errors", False)
+
+    user_text = normalize(message.text)
+    correct_name_norm = normalize(correct_prep.name)
+
+    stats = get_user_stats(user_id)
+    stats["total"] += 1
+
+    words = [w for w in correct_name_norm.split() if len(w) > 3]
+
+    if any(w in user_text for w in words):
+        stats["correct"] += 1
+        stats["errors"].discard(correct_prep.id)
+        text = f"✅ Верно! Это <b>{correct_prep.name}</b>."
+    else:
+        stats["wrong"] += 1
+        stats["errors"].add(correct_prep.id)
+        text = (
+            f"❌ Не совсем.\n"
+            f"Правильный ответ: <b>{correct_prep.name}</b>."
+        )
+
+    bot.send_message(message.chat.id, text)
+    send_typing_question(message.chat.id, user_id, only_errors=from_errors)
+
+
+# ========== ЗАПУСК ==========
+
+if __name__ == "__main__":
+    print("Бот запущен (polling)...")
+    bot.infinity_polling()

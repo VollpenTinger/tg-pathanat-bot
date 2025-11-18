@@ -775,6 +775,19 @@ def handle_training_category(callback: types.CallbackQuery):
     bot.answer_callback_query(callback.id, f"Раздел: {cat_name}")
     send_preparat_training(chat_id, PREP_BY_ID[prep_id], with_keyboard=True)
 
+# ---------- ВЫХОД ИЗ РЕЖИМА ОБУЧЕНИЯ ----------
+
+@bot.message_handler(func=lambda m: m.text == "🏁 Выйти")
+def handle_training_exit(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in user_state:
+        user_state.pop(user_id)
+
+    bot.send_message(
+        message.chat.id,
+        "Ты вышел из режима обучения 👌",
+        reply_markup=main_keyboard()
+    )
 
 # ---------- ОБУЧЕНИЕ: НАВИГАЦИЯ ----------
 

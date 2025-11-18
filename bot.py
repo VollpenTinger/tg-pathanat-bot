@@ -703,3 +703,121 @@ def pick_next_training_prep(user_id: int) -> Preparat | None:
     return PREP_BY_ID[prep_id]
 
 
+# ========== ХЕНДЛЕРЫ ==========
+
+@bot.message_handler(commands=["start"])
+def cmd_start(message: types.Message):
+    bot.send_message(
+        message.chat.id,
+        "Привет! Я бот для отработки микропрепаратов по патанатомии.\n\n"
+        "Режимы:\n"
+        "• <b>Обучение</b> – показываю препарат и его название (по разделам).\n"
+        "• <b>Случайные препараты</b> – обучение на всех препаратах вперемешку.\n"
+        "• <b>Тест (варианты)</b> – выбираешь правильный ответ из списка.\n"
+        "• <b>Тест (ввод)</b> – сам вписываешь ответ.\n"
+        "• <b>Статистика</b> – твои результаты.\n"
+        "• <b>Повторить ошибки</b> – тренировка по сложным препаратам.\n",
+        reply_markup=main_keyboard(),
+    )
+
+
+# ---------- ОБУЧЕНИЕ: ВЫБОР РАЗДЕЛА ----------
+
+@bot.message_handler(func=lambda m: m.text == "📚 Обучение")
+def handle_training_menu(message: types.Message):
+    kb = types.InlineKeyboardMarkup()
+    for cat in CATEGORIES_ORDERED:
+        kb.add(
+            types.InlineKeyboardButton(
+                text=cat,
+                callback_data=f"cat:{cat}",
+            )
+        )
+    # кнопка случайных препаратов
+    kb.add(
+        types.InlineKeyboardButton(
+            text="Случайные препараты",
+            callback_data=f"cat:{RANDOM_CATEGORY_KEY}",
+        )
+    )
+    bot.send_message(
+        message.chat.id,
+        "Выбери раздел для обучения:",
+        reply_markup=kb,
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("cat:"))
+def handle_training_category(callback: types.CallbackQuery):
+    _, category_key = callback.data.split(":", 1)
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    ids = get_training_list_for_user(user_id, category_key)
+    if not ids:
+        bot.answer_callback_query(callback.id, "В этом разделе пока нет препаратов.")
+        bot.send_message(chat_id, "В этом разделе пока нет препаратов.", reply_markup=main_keyboard())
+        return
+
+    user_state[user_id]["mode"] = "train"
+    prep_id = user_state[user_id]["train_remaining"].pop()
+    user_state[user_id]["train_current_id"] = prep_id
+
+    cat_name = "Случайные препараты" if category_key == RANDOM_CATEGORY_KEY else category_key
+
+    bot.answer_callback_query(callback.id, f"Раздел: {cat_name}")
+    send_preparat_training(chat_id, PREP_BY_ID[prep_id], with_keyboard=True)
+
+
+# ---------- ВЫХОД И ВОЗВРАТ ----------
+
+@bot.message_handler(func=lambda m: m.text == "🔙 Назад к разделам")
+def handle_training_back(message: types.Message):
+    st = user_state.get(message.from_user.id)
+    if st:
+        st.pop("mode", None)
+        st.pop("train_category", None)
+        st.pop("train_remaining", None)
+        st.pop("train_current_id", None)
+
+    handle_training_menu(message)
+
+
+@bot.message_handler(func=lambda m: m.text == "🏁 Выйти")
+def handle_training_exit(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in user_state:
+        user_state.pop(user_id)
+
+    bot.send_message(
+        message.chat.id,
+        "Ты вышел из режима обучения 👌",
+        reply_markup=main_keyboard()
+    )
+
+
+# ---------- ОБУЧЕНИЕ: НАВИГАЦИЯ ----------
+
+@bot.message_handler(func=lambda m: m.text == "➡️ Следующий")
+def handle_training_next(message: types.Message):
+    user_id = message.from_user.id
+    st = user_state.get(user_id)
+
+    if not st or st.get("mode") != "train":
+        bot.send_message(
+            message.chat.id,
+            "Сначала выбери раздел обучения через кнопку «📚 Обучение».",
+            reply_markup=main_keyboard(),
+        )
+        return
+
+    prep = pick_next_training_prep(user_id)
+    if not prep:
+        bot.send_message(
+            message.chat.id,
+            "В этом разделе закончились препараты 😊",
+            reply_markup=main_keyboard(),
+        )
+        return
+
+    send_preparat_training(message.chat.id, prep, with_keyboard=True)

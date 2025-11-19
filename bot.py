@@ -715,7 +715,7 @@ def send_typing_question(chat_id: int, user_id: int, only_errors: bool = False):
 def cmd_start(message: types.Message):
     bot.send_message(
         message.chat.id,
-        "Ну что же поучим препараты 🤓😜",
+        "Ну что же, поучим препараты 🤓😜",
         reply_markup=main_keyboard(),
     )
 

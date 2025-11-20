@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build: .
+    container_name: preparats-bot
+    restart: unless-stopped
+    volumes:
+      - ./preparats:/app/preparats
+      - ./preparats.json:/app/preparats.json
+    env_file:
+      - .env

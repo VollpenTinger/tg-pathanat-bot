@@ -1,0 +1,8 @@
+.env
+*.pyc
+__pycache__
+.git
+.gitignore
+Dockerfile
+README.md
+.preparats
